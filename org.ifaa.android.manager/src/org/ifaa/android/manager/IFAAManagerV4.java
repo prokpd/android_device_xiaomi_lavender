@@ -8,5 +8,4 @@ public abstract class IFAAManagerV4 extends IFAAManagerV3 {
 
     @UnsupportedAppUsage
     public abstract int[] getIDList(int bioType);
-
 }

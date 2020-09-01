@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
+
 <!--Copyright (c) 2013, The Linux Foundation. All rights reserved.
 
     Not a Contribution, Apache license notifications and license are retained
@@ -37,7 +38,4 @@
 
     <!-- Show Preferred Network Type options in No SIM case -->
     <bool name="config_no_sim_display_network_modes">true</bool>
-
-    <!-- Package name for the call-based number verification app -->
-    <string name="platform_number_verification_package" translatable="false">com.google.android.gms</string>
 </resources>

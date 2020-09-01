@@ -27,11 +27,6 @@
 #
 #
 
-on early-init
-    mkdir /firmware 0771 system system
-    mkdir /bt_firmware 0771 system system
-    mkdir /dsp 0771 media media
-
 on init
     write /dev/stune/foreground/schedtune.sched_boost_no_override 1
     write /dev/stune/top-app/schedtune.sched_boost_no_override 1
@@ -41,32 +36,24 @@ on init
     write /dev/stune/foreground/schedtune.colocate 0
     write /dev/stune/top-app/schedtune.colocate 1
 
+    # ZRAM setup
+    write /sys/block/zram0/comp_algorithm lz4
+    write /sys/block/zram0/disksize 2147483648
+    write /sys/block/zram0/max_comp_streams 8
+    write /proc/sys/vm/page-cluster 0
+
 on fs
     wait /dev/block/platform/soc/${ro.boot.bootdevice}
     symlink /dev/block/platform/soc/${ro.boot.bootdevice} /dev/block/bootdevice
     mount_all /vendor/etc/fstab.qcom
-    swapon_all /vendor/etc/fstab.qcom
     chown root system /mnt/vendor/persist
     chmod 0771 /mnt/vendor/persist
-    chmod 0771 /mnt/vendor/persist/spkr_calib_l.bin
     mkdir /mnt/vendor/persist/data 0700 system system
-    mkdir /mnt/vendor/persist/stability 0755 system system
     mkdir /mnt/vendor/persist/bms 0700 root system
-    exec u:r:vendor_toolbox:s0 root audio bluetooth graphics media net_raw system vendor_rfs vendor_rfs_shared -- /vendor/bin/toybox_vendor find /mnt/vendor/persist -type d -exec /vendor/bin/toybox_vendor setfattr -x security.sehash {} \;
     restorecon_recursive /mnt/vendor/persist
     write /sys/kernel/boot_adsp/boot 1
     chown system system /dev/goodix_fp
     #chmod 0644 /dev/goodix_fp
-    chmod 0664 /sys/class/thermal/thermal_message/sconfig
-    chown system system /sys/class/thermal/thermal_message/sconfig
-
-    chmod 0666 /sys/class/thermal/thermal_message/temp_state
-    chown system system /sys/class/thermal/thermal_message/temp_state
-
-    mkdir /mnt/vendor/dsp 0770 root root
-    copy /vendor/dsp/cdsp/fastrpc_shell_3 /mnt/vendor/dsp/fastrpc_shell_3
-    chmod 0644 /mnt/vendor/dsp/fastrpc_shell_3
-    mount none /mnt/vendor/dsp/fastrpc_shell_3 /vendor/dsp/cdsp/fastrpc_shell_3 bind
 
 on post-fs
     start vendor.qseecomd
@@ -80,19 +67,14 @@ on post-fs-data
     mkdir /data/tombstones/lpass 0771 system system
     mkdir /data/tombstones/wcnss 0771 system system
     mkdir /data/tombstones/dsps 0771 system system
-    mkdir /data/misc/seemp 0700 system system
-    mkdir /data/thermal 0771 root system
-    mkdir /data/thermal/config 0771 root system
-
-#Creat charger logg
-    mkdir /data/vendor/charge_logger 0771 system system
+    mkdir /data/vendor/hbtp 0750 system system
 
 on boot
-    start rmt_storage
-    start rfs_access
+    start vendor.rmt_storage
+    start vendor.rfs_access
     write /dev/cpuset/top-app/cpus 0-7
+    write /dev/cpuset/audio-app/cpus 1-2
     write /dev/cpuset/foreground/cpus 0-7
-    write /dev/cpuset/foreground/boost/cpus 0-7
     write /dev/cpuset/background/cpus 0-7
     write /dev/cpuset/system-background/cpus 0-7
     ####Regionalization config and prop files####
@@ -112,18 +94,16 @@ on boot
     chown system system /persist/speccfg/vendor_persist.prop
     chown system system /persist/speccfg/submask
     chown system system /persist/speccfg/partition
-	chown root system /proc/tp_grip_area
+
+#DT2W
+    chown system system /proc/tp_gesture
+    chmod 0660 /proc/tp_gesture
 
 #Create folder dump yuv images while debugging
     mkdir /data/vendor/camera 0770 camera camera
 
-    # Double Tap to Wake
-    chown system system /proc/tp_gesture
-    chmod 0660 /proc/tp_gesture
-
 #Load WLAN driver
    insmod /vendor/lib/modules/qca_cld3_wlan.ko
-   chown wifi wifi /sys/module/wlan/parameters/fwpath
 
 #USB controller configuration
     setprop vendor.usb.rndis.func.name "rndis_bam"
@@ -152,25 +132,9 @@ on property:init.svc.vendor.per_mgr=running
 
 on property:sys.shutdown.requested=*
     stop vendor.per_proxy
-on property:sys.thermallct.isincall=1
-    write /sys/class/power_supply/battery/device/thermalcall 1
-
-on property:sys.thermallct.isincall=0
-    write /sys/class/power_supply/battery/device/thermalcall 0
-
-
-# add charge_logger service for dump charge message
-service charge_logger /vendor/bin/charge_logger
-   class last_start
-   user system
-   group system system wakelock
-   disabled
-   oneshot
-
-on property:sys.boot_completed=1
-    start charge_logger
 
 service vendor.qseecomd /vendor/bin/qseecomd
+   shutdown critical
    class core
    user root
    group root
@@ -194,6 +158,12 @@ service adsprpcd /vendor/bin/adsprpcd audiopd
    user media
    group media
 
+service hbtp /system/vendor/bin/hbtp_daemon
+    class main
+    user system
+    group system
+    disabled
+
 service audiod /system/vendor/bin/audiod
    class late_start
    user system
@@ -204,21 +174,6 @@ service vendor.cdsprpcd /vendor/bin/cdsprpcd
    user system
    group system
    disabled
-
-## imsdatadaemon starts with root and UID will be downgraded to SYSTEM.
-service vendor.imsqmidaemon /system/vendor/bin/imsqmidaemon
-    class main
-    user system
-    socket ims_qmid stream 0660 system radio
-    group radio log diag
-
-# imsdatadaemon starts with root and UID will be downgraded to SYSTEM.
-service vendor.imsdatadaemon /system/vendor/bin/imsdatadaemon
-    class main
-    user system
-    socket ims_datad stream 0660 system radio
-    group system wifi radio inet log diag
-    disabled
 
 service energy-awareness /system/vendor/bin/energy-awareness
     class main
@@ -237,14 +192,15 @@ service vendor.pd_mapper /system/vendor/bin/pd-mapper
 on property:vendor.ims.QMI_DAEMON_STATUS=1
     start vendor.imsdatadaemon
 
-#on property:vold.decrypt=trigger_restart_framework
-#   start cnss_diag
+on property:vold.decrypt=trigger_restart_framework
+   start cnss_diag
+   restart vendor.camera-provider-2-4
 
 service cnss_diag /system/vendor/bin/cnss_diag -q -f -t HELIUM
    class main
    user system
    group system wifi inet sdcard_rw media_rw diag
-   disabled
+   oneshot
 
 service vendor.ims_rtp_daemon /system/vendor/bin/ims_rtp_daemon
    class main
@@ -259,7 +215,6 @@ service vendor.imsrcsservice /system/vendor/bin/imsrcsd
 on property:vendor.ims.DATA_DAEMON_STATUS=1
     restart vendor.ims_rtp_daemon
 
-
 service ppd /system/vendor/bin/mm-pp-dpps
     class late_start
     user system
@@ -267,34 +222,27 @@ service ppd /system/vendor/bin/mm-pp-dpps
     socket pps stream 0660 system system
     disabled
 
-on property:init.svc.surfaceflinger=stopped
+on property:init.svc.hwcomposer-2-1=stopped
     stop ppd
 
-on property:init.svc.surfaceflinger=running
+on property:init.svc.hwcomposer-2-1=running
     start ppd
 
-on property:init.svc.surfaceflinger=restarting
+on property:init.svc.hwcomposer-2-1=restarting
     stop ppd
 
-on property:init.svc.zygote=stopped
-    stop ppd
-
-on property:init.svc.zygote=running
-    start ppd
-
-on property:init.svc.zygote=restarting
-    stop ppd
+on property:sys.boot_completed=1
+    setprop sys.io.scheduler "bfq"
+    # Enable ZRAM on boot_complete
+    swapon_all /vendor/etc/fstab.qcom
+    write /proc/sys/vm/swappiness 100
 
 on charger
     load_system_props
     start qcom-post-boot
-    mkdir /data/vendor/charge_logger 0771 system system
-    chown system system /sys/class/leds/red/brightness
-    chmod 0666 /sys/class/leds/red/brightness
     start vendor.hvdcp_opti
     setprop sys.usb.configfs 1
     start power_off_alarm
-    start charge_logger
 
 service seempd /system/bin/seempd
     class late_start
@@ -306,84 +254,4 @@ service vendor.hvdcp_opti /system/vendor/bin/hvdcp_opti
      class main
      user root
      group system wakelock
-
-
-#ad display feature
-on property:persist.sys.display_srgb=1
-    write /sys/class/graphics/fb0/msm_fb_srgb 1
-
-on property:persist.sys.display_srgb=2
-    write /sys/class/graphics/fb0/msm_fb_srgb 2
- 
-on property:persist.sys.display_ce=4
-    write /sys/class/graphics/fb0/msm_fb_ce 1
- 
-on property:persist.sys.display_ce=0
-    write /sys/class/graphics/fb0/msm_fb_ce 2
-
-on property:persist.sys.display_cabc=1
-    write /sys/class/graphics/fb0/msm_fb_cabc 1
- 
-on property:persist.sys.display_cabc=2
-    write /sys/class/graphics/fb0/msm_fb_cabc 2
-
-#on property:persist.sys.display_gamma=1
-#    write /sys/class/graphics/fb0/msm_fb_gamma 1
- 
-#on property:persist.sys.display_gamma=2
-#    write /sys/class/graphics/fb0/msm_fb_gamma 2
- 
-on property:persist.sys.display_cabc_movie=1
-    write /sys/class/graphics/fb0/msm_fb_cabc_movie 1
- 
-on property:persist.sys.display_cabc_movie=2
-    write /sys/class/graphics/fb0/msm_fb_cabc_movie 2
-
-on property:persist.sys.display_cabc_still=1
-    write /sys/class/graphics/fb0/msm_fb_cabc_still 1
- 
-on property:persist.sys.display_cabc_still=2
-    write /sys/class/graphics/fb0/msm_fb_cabc_still 2
- 
-on property:sys.hbm_mode=1
-    write /sys/class/graphics/fb0/msm_fb_hbm 1
-
-on property:sys.hbm_mode=2
-    write /sys/class/graphics/fb0/msm_fb_hbm 2
- 
-on property:sys.hbm_mode=3
-    write /sys/class/graphics/fb0/msm_fb_hbm 3
-
-on property:sys.hbm_mode=0
-    write /sys/class/graphics/fb0/msm_fb_hbm 0
- 
-service adswitch /vendor/bin/adswitch
-     user root
-     group root
      disabled
-     oneshot
-
-on property:sys.ad.enable=on
-    start adswitch
- 
-on property:sys.ad.enable=off
-    start adswitch
-
-#touch settings
-on property:vendor.tp.grip_area=90
-    write /proc/tp_grip_area 90
-on property:vendor.tp.grip_area=270
-    write /proc/tp_grip_area 270
-on property:vendor.tp.grip_area=0
-    write /proc/tp_grip_area 0
-on property:vendor.tp.grip_area=1
-    write /proc/tp_grip_area 1
-on property:vendor.tp.grip_area=180
-    write /proc/tp_grip_area 180
-
-service checknv /system/bin/checknv
-    class late_start
-    user root
-    oneshot
-    seclabel u:r:recovery:s0
-

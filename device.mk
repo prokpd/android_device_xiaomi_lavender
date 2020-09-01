@@ -529,6 +529,6 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
     KimciRecorder
 
-# Xiaomi Parts
+# Corvus Parts
 PRODUCT_PACKAGES += \
-    XiaomiParts
+    CorvusParts

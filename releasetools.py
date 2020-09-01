@@ -13,48 +13,49 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import hashlib
 import common
 import re
 
-def FullOTA_Assertions(info):
-  input_zip = info.input_zip
-  AddTrustZoneAssertion(info, input_zip)
-  return
-
-def IncrementalOTA_Assertions(info):
-  input_zip = info.target_zip
-  AddTrustZoneAssertion(info, input_zip)
-  return
-
 def FullOTA_InstallEnd(info):
-  input_zip = info.input_zip
-  OTA_InstallEnd(info, input_zip)
+  OTA_InstallEnd(info)
   return
 
 def IncrementalOTA_InstallEnd(info):
-  input_zip = info.target_zip
-  OTA_InstallEnd(info, input_zip)
+  OTA_InstallEnd(info)
   return
 
-def AddTrustZoneAssertion(info, input_zip):
+def FullOTA_Assertions(info):
+  AddBasebandAssertion(info, info.input_zip)
+  return
+
+def IncrementalOTA_Assertions(info):
+  AddBasebandAssertion(info, info.target_zip)
+  return
+
+def AddImage(info, basename, dest):
+  path = "IMAGES/" + basename
+  if path not in info.input_zip.namelist():
+    return
+
+  data = info.input_zip.read(path)
+  common.ZipWriteStr(info.output_zip, basename, data)
+  info.script.Print("Flashing {} image".format(dest.split('/')[-1]))
+  info.script.AppendExtra('package_extract_file("%s", "%s");' % (basename, dest))
+
+def OTA_InstallEnd(info):
+  AddImage(info, "dtbo.img", "/dev/block/bootdevice/by-name/dtbo")
+  AddImage(info, "vbmeta.img", "/dev/block/bootdevice/by-name/vbmeta")
+  return
+
+def AddBasebandAssertion(info, input_zip):
   android_info = input_zip.read("OTA/android-info.txt")
-  m = re.search(r'require\s+version-trustzone\s*=\s*(\S+)', android_info)
+  m = re.search(r'require\s+version-baseband\s*=\s*(.+)', android_info)
   if m:
-    versions = m.group(1).split('|')
-    if len(versions) and '*' not in versions:
-      cmd = 'assert(lavender.verify_trustzone(' + ','.join(['"%s"' % tz for tz in versions]) + ') == "1");'
-      info.script.AppendExtra(cmd)
-  return
-
-def AddImage(info, input_zip, basename, dest):
-  name = basename
-  data = input_zip.read("IMAGES/" + basename)
-  common.ZipWriteStr(info.output_zip, name, data)
-  info.script.Print("Patching {} image unconditionally...".format(dest.split('/')[-1]))
-  info.script.AppendExtra('package_extract_file("%s", "%s");' % (name, dest))
-
-
-def OTA_InstallEnd(info, input_zip):
-  AddImage(info, input_zip, "vbmeta.img", "/dev/block/bootdevice/by-name/vbmeta")
-  AddImage(info, input_zip, "dtbo.img", "/dev/block/bootdevice/by-name/dtbo")
+    timestamp, firmware_version = m.group(1).rstrip().split(',')
+    timestamps = timestamp.split('|')
+    if ((len(timestamps) and '*' not in timestamps) and \
+        (len(firmware_version) and '*' not in firmware_version)):
+      cmd = 'assert(xiaomi.verify_baseband(' + ','.join(['"%s"' % baseband for baseband in timestamps]) + ') == "1" || abort("ERROR: This package requires firmware from MIUI {1} or newer. Please upgrade firmware and retry!"););'
+      info.script.AppendExtra(cmd.format(timestamps, firmware_version))
   return

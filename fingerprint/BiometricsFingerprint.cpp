@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#define LOG_TAG "android.hardware.biometrics.fingerprint@2.1-service.lavender"
+#define LOG_TAG "android.hardware.biometrics.fingerprint@2.1-service.xiaomi_lavender"
 
 #include <hardware/hw_auth_token.h>
 
@@ -205,6 +205,10 @@ Return<RequestStatus> BiometricsFingerprint::authenticate(uint64_t operationId,
     return ErrorFilter(mDevice->authenticate(mDevice, operationId, gid));
 }
 
+void setFpVendorProp(const char *fp_vendor) {
+    property_set("persist.vendor.sys.fp.vendor", fp_vendor);
+}
+
 IBiometricsFingerprint* BiometricsFingerprint::getInstance() {
     if (!sInstance) {
       sInstance = new BiometricsFingerprint();
@@ -212,10 +216,6 @@ IBiometricsFingerprint* BiometricsFingerprint::getInstance() {
     return sInstance;
 }
 
-void setFpVendorProp(const char *fp_vendor) {
-    property_set("persist.vendor.sys.fp.vendor", fp_vendor);
-    property_set("ro.boot.fpsensor", fp_vendor);
-}
 
 fingerprint_device_t* getDeviceForVendor(const char *class_name)
 {
@@ -282,7 +282,6 @@ fingerprint_device_t* getFingerprintDevice()
     }
 
     setFpVendorProp("none");
-
     return nullptr;
 }
 
