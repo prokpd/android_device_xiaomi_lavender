@@ -463,5 +463,5 @@ PRODUCT_PACKAGES += \
     CorvusParts
 
 # Recorder 
-PRODUCT_PACKAGES += \ 
+PRODUCT_PACKAGES += \
     KimciRecorder
